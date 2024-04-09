@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch
 import torch.nn.functional as F
 from .MSF import ChannelTransformer
-import nets.SSA as SSA
+import .SSA as SSA
 
 from timm.models import create_model
 
@@ -191,7 +191,7 @@ class spatial_attention(nn.Module):
     def __init__(self, kernel_size=7):
         super(spatial_attention, self).__init__()
         padding = kernel_size // 2
-        self.conv = Conv(2, 1, 7, bn=True, relu=True, bias=False)
+        self.conv = Conv(2, 1, 3, bn=True, relu=True, bias=False)
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, inputs):
@@ -205,9 +205,9 @@ class spatial_attention(nn.Module):
 
 
 class BiUNet(nn.Module):
-    def __init__(self, config, n_channels=3, n_classes=1, vis=False,
+    def __init__(self, config, n_channels=Config.channel_n, n_classes=Config.n_class, vis=False,
                  img_size=Config.img_size, shunted_modelname='shunted_b', drop_path=0.3, clip_grad=1,
-                 drop=0.0, drop_block_rate=None, output_dir='checkpoints/shunted_b'
+                 drop=0.0, drop_block_rate=None
                  ):
         super().__init__()
         self.vis = vis
@@ -217,12 +217,12 @@ class BiUNet(nn.Module):
         self.transformer = create_model(
             shunted_modelname,
             pretrained=True,
-            num_classes=1,
+            num_classes=n_classes,
             drop_rate=drop,
             drop_path_rate=drop_path,
             drop_block_rate=None,
         )
-        in_channels0 = 48
+        in_channels0 = Config.in_channel0
         self.inc0 = ConvBatchNorm(n_channels, in_channels)
         self.inc = DownBlock(n_channels, in_channels0, nb_Conv=2)
         self.down1 = DownBlock(in_channels0, in_channels0 * 2, nb_Conv=2)
@@ -262,7 +262,7 @@ class BiUNet(nn.Module):
         x2 = self.down1(x1)
         x3 = self.down2(x2)
         x4 = self.down3(x3)
-        cnn_visualize = x3
+        
 
         stage_x = self.transformer(x)
         x1 = self.bf1(x1, stage_x[0])
@@ -270,7 +270,7 @@ class BiUNet(nn.Module):
         x3 = self.bf3(x3, stage_x[2])
         x4 = self.bf4(x4, stage_x[3])
         x5 = self.down4(x4)
-        tf_visualize = x3
+        
 
         x5 = self.cab(x5)
 
@@ -285,8 +285,8 @@ class BiUNet(nn.Module):
         x = torch.cat([x, x0], dim=1)
         x = self.nConvs2(x)
 
-        bi_visualize = x
+        
         prob = self.outc(x)
         logits = self.last_activation(prob)
 
-        return logits, cnn_visualize, tf_visualize, bi_visualize
+        return logits
